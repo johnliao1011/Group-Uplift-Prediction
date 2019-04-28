@@ -1,39 +1,99 @@
-
-Group_SepUplift <- function(train, valid, TargetVar, TreatVar, Ypre){
-  # separte Ypre =1/0
-  trainYpre1 <- subset(train, train[, Ypre] ==1)
-  trainYpre0 <- subset(train, train[, Ypre] ==0)
+# Group Uplift Prediction
+Group_SepUplift <- function(data, index, TargetVar, TreatVar, Ypre){
   
-  validYpre1 <- subset(valid, valid[, Ypre] ==1)
-  validYpre0 <- subset(valid, valid[, Ypre] ==0)
+  res_gain.ratio<-matrix(nrow = 11, ncol = ncol(index), vector())%>% data.frame()
+  model_template <- list('gainRatio' = res_gain.ratio)
+  model_approach <- list('RF'= model_template,
+                         'DT'= model_template,
+                         'KNN'= model_template,
+                         'Lm'= model_template,
+                         "Lasso" = model_template,
+                         "model" = NULL)
   
-  # drop out the Ypre 
-  # (for lm and lasso can not input the predictor which only has one level factor)
-  # (for dt and rf will automatically drop out the predictor)
-  trainYpre1 <- trainYpre1[, -which(colnames(trainYpre1)== Ypre)]
-  trainYpre0 <- trainYpre0[, -which(colnames(trainYpre0)== Ypre)]
+  uplift_approach <- list('RF'= model_template,
+                          'DT'= model_template,
+                          'KNN'= model_template)
   
-  validYpre1 <- validYpre1[, -which(colnames(validYpre1)== Ypre)]
-  validYpre0 <- validYpre0[, -which(colnames(validYpre0)== Ypre)]
+  model_collector <- list('Oma'=model_approach,
+                          'Tma'=model_approach,
+                          "Uplift"=uplift_approach)
   
-  print("Ypre Separation :: OK")
+  for (i in c(1:ncol(index))) {
+    trainIdx<-index[,i]
+    
+    # data for y and treatment is factor (Tma and Oma adapt this)
+    data[, Ypre] <- factor(data[, Ypre], levels = c(0,1))
+    data[, TreatVar] <- factor(data[, TreatVar], levels = c(0,1))
+    data[, TargetVar] <- factor(data[, TargetVar], levels = c(0,1))
+    
+    train <- data[trainIdx,]
+    valid <- data[-trainIdx,]
+    
+    # separte Ypre =1/0
+    trainYpre1 <- subset(train, train[, Ypre] ==1)
+    trainYpre0 <- subset(train, train[, Ypre] ==0)
+    
+    validYpre1 <- subset(valid, valid[, Ypre] ==1)
+    validYpre0 <- subset(valid, valid[, Ypre] ==0)
+    
+    # drop out the Ypre 
+    # (for lm and lasso can not input the predictor which only has one level factor)
+    # (for dt and rf will automatically drop out the predictor)
+    trainYpre1 <- trainYpre1[, -which(colnames(trainYpre1)== Ypre)]
+    trainYpre0 <- trainYpre0[, -which(colnames(trainYpre0)== Ypre)]
+    
+    validYpre1 <- validYpre1[, -which(colnames(validYpre1)== Ypre)]
+    validYpre0 <- validYpre0[, -which(colnames(validYpre0)== Ypre)]
+    
+    print("Ypre Separation :: OK")
+    
+    cat(crayon::blue(sprintf('One Model Appraoch:: Boostrap %s start \n', i)))
+    
+    OmaResult <- OmaModule(Train_Ypre1 = trainYpre1, Train_Ypre0 = trainYpre0,
+                           Valid_Ypre1 = validYpre1, Valid_Ypre0 = validYpre0,
+                           TargetVar = TargetVar, TreatVar = TreatVar)
+    
+    model_collector$Oma$RF$gainRatio[(1:length(OmaResult$RF)),i] <- OmaResult$RF
+    model_collector$Oma$DT$gainRatio[(1:length(OmaResult$DT)),i] <- OmaResult$DT
+    model_collector$Oma$KNN$gainRatio[(1:length(OmaResult$KNN)),i] <- OmaResult$KNN
+    model_collector$Oma$Lm$gainRatio[(1:length(OmaResult$LM)),i] <- OmaResult$LM
+    model_collector$Oma$Lasso$gainRatio[(1:length(OmaResult$Lasso)),i] <- OmaResult$Lasso
+    
+    cat(crayon::blue(sprintf('Two Model Appraoch:: Boostrap %s start \n', i)))
+    
+    TmaResult <- TmaModule(Train_Ypre1 = trainYpre1, Train_Ypre0 = trainYpre0,
+                           Valid_Ypre1 = validYpre1, Valid_Ypre0 = validYpre0,
+                           TargetVar = TargetVar, TreatVar = TreatVar)
+    
+    model_collector$Tma$RF$gainRatio[(1:length(TmaResult$RF)),i] <- TmaResult$RF
+    model_collector$Tma$DT$gainRatio[(1:length(TmaResult$DT)),i] <- TmaResult$DT
+    model_collector$Tma$KNN$gainRatio[(1:length(TmaResult$KNN)),i] <- TmaResult$KNN
+    model_collector$Tma$Lm$gainRatio[(1:length(TmaResult$LM)),i] <- TmaResult$LM
+    model_collector$Tma$Lasso$gainRatio[(1:length(TmaResult$Lasso)),i] <- TmaResult$Lasso
+    
+    UpliftResult <- UpliftModule(Train_Ypre1 = trainYpre1, Train_Ypre0 = trainYpre0,
+                                 Valid_Ypre1 = validYpre1, Valid_Ypre0 = validYpre0,
+                                 TargetVar = TargetVar, TreatVar = TreatVar)
+    
+    model_collector$Uplift$RF$gainRatio[(1:length(UpliftResult$RF)),i] <- UpliftResult$RF
+    model_collector$Uplift$DT$gainRatio[(1:length(UpliftResult$DT)),i] <- UpliftResult$DT
+    model_collector$Uplift$KNN$gainRatio[(1:length(UpliftResult$KNN)),i] <- UpliftResult$KNN
+    model_collector$Uplift$Lm$gainRatio[(1:length(UpliftResult$LM)),i] <- UpliftResult$LM
+    model_collector$Uplift$Lasso$gainRatio[(1:length(UpliftResult$Lasso)),i] <- UpliftResult$Lasso
+    
+    if(i ==1){
+      model_collector$Oma$model <- OmaResult$model
+      model_collector$Tma$model <- TmaResult$model
+      
+    }
+  }
   
-  OmaResult <- OmaModule(Train_Ypre1 = trainYpre1, Train_Ypre0 = trainYpre0,
-                         Valid_Ypre1 = validYpre1, Valid_Ypre0 = validYpre0,
-                         TargetVar = "MOVED_AD_NUM", TreatVar = "MESSAGE_A")
-  
-  TmaResult <- TmaModule(Train_Ypre1 = trainYpre1, Train_Ypre0 = trainYpre0,
-                         Valid_Ypre1 = validYpre1, Valid_Ypre0 = validYpre0,
-                         TargetVar = "MOVED_AD_NUM", TreatVar = "MESSAGE_A")
-  
-  TotalResult <- list("Oma" = OmaResult, "Tma" = TmaResult)
-  return(TotalResult)
-  
-  
+  cat(crayon::red('Boostrap Finish \n\n'))
+  return(model_collector)
 }
 
 
-
+# Function
 DataTransform<- function(trainData, validData, OneModel=TRUE, y, treatment){
   
   if (OneModel==TRUE) {
@@ -232,6 +292,7 @@ SepPerform <- function(ResYpre1, ResYpre0, TargetVarYpre1, TargetVarYpre0, Treat
   
 }
 
+# Moduels
 OmaMethod <- function(Data, y, treatment){
   
   modeFormula <- as.formula(paste( y, ".", sep = "~"))
@@ -453,6 +514,43 @@ TmaMethod <- function(Data, y, treatment){
                        "y" =Data$Valid$y, "ct" = Data$Valid$ct, "model" = MODEl)
   
 }
+UpliftMethod <- function(train, valid, y, treatment){
+  
+  train[,y] <- as.numeric(as.character(train[,y]))
+  train[,treatment] <- as.numeric(as.character(train[,treatment]))
+  
+  valid[,y] <- as.numeric(as.character(valid[,y]))
+  valid[,treatment] <- as.numeric(as.character(valid[,treatment]))
+  
+  treatVariable <-  paste0("trt(", paste0(treatment, ")"))
+  modeFormula <- as.formula(paste(y,
+                                  paste(c(colnames(train[,-which(colnames(train)%in% c(y, treatment))]), 
+                                          treatVariable),collapse = "+"),
+                                  sep = "~"))
+  # RF
+  upRF.model<-upliftRF(modeFormula, data = train, mtry=3, ntree=100, split_method="ED", minsplit=200, verbose=TRUE)  
+  upRF.pred<-predict(upRF.model, newdata=valid)
+  RF_Result <- data.frame("T1"= upRF.pred[,1], "T0"= upRF.pred[,2])
+  
+  print("UpliftRF model: Finish")
+  
+  # DT
+  upDT.model<-upliftRF(modeFormula, data = train, mtry=ncol(train)-2, ntree=1, bag.fraction = 1, split_method="ED", minsplit=200, verbose=TRUE)
+  upDT.pred<-predict(upDT.model, newdata=valid)
+  DT_Result <- data.frame("T1"= upDT.pred[,1], "T0"= upDT.pred[,2])
+  
+  print("UpliftDT model: Finish")
+  
+  # KNN
+  upKNN.model<-upliftKNN(train = train, test =valid, y = train[,y], ct = train[ ,treatment], dist.method = "euclidean", k = 3, agg.method = "majority" )
+  KNN_Result <- data.frame("T1"= upKNN.model[,2], "T0"= upKNN.model[,1])
+  
+  print("UpliftKNN model: Finish")
+  
+  
+  model_result <- list("RF" = RF_Result, "DT" = DT_Result, "KNN" = KNN_Result, 
+                       "y" =valid[,y], "ct" = valid[,treatment])
+}
 
 OmaModule <- function(Train_Ypre1, Train_Ypre0, Valid_Ypre1, Valid_Ypre0, TargetVar, TreatVar){
   # transform data
@@ -487,16 +585,16 @@ OmaModule <- function(Train_Ypre1, Train_Ypre0, Valid_Ypre1, Valid_Ypre0, Target
                              TargetVarYpre1 = ModelYpre1$y, TargetVarYpre0 = ModelYpre0$y,
                              TreatVarYpre1 = ModelYpre1$ct, TreatVarYpre0 = ModelYpre0$ct)
   
-  MODEl <- list("Ypre1" =Method,"Ypre0" =Method)
+  MODEl <- list("Ypre1" =NULL,"Ypre0" =NULL)
   MODEl$Ypre1 <- ModelYpre1$model
   MODEl$Ypre0 <- ModelYpre0$model
   
   
-  Result <- list("RF" = RF.result[, c("gain", "gain_ratio", "gini")],
-                 "DT" = DT.result[, c("gain", "gain_ratio", "gini")],
-                 "KNN" = KNN.result[, c("gain", "gain_ratio", "gini")],
-                 "LM" = LM.result[, c("gain", "gain_ratio", "gini")],
-                 "Lasso" = Lasso.result[, c("gain", "gain_ratio", "gini")],
+  Result <- list("RF" = RF.result[, "gain_ratio"],
+                 "DT" = DT.result[, "gain_ratio"],
+                 "KNN" = KNN.result[,"gain_ratio"],
+                 "LM" = LM.result[, "gain_ratio"],
+                 "Lasso" = Lasso.result[,"gain_ratio"],
                  "model" = MODEl)
   
   return(Result)
@@ -534,17 +632,45 @@ TmaModule <- function(Train_Ypre1, Train_Ypre0, Valid_Ypre1, Valid_Ypre0, Target
                              TargetVarYpre1 = ModelYpre1$y, TargetVarYpre0 = ModelYpre0$y,
                              TreatVarYpre1 = ModelYpre1$ct, TreatVarYpre0 = ModelYpre0$ct)
   
-  MODEl <- list("Ypre1" =Method,"Ypre0" =Method)
+  MODEl <- list("Ypre1" =NULL,"Ypre0" =NULL)
   MODEl$Ypre1 <- ModelYpre1$model
   MODEl$Ypre0 <- ModelYpre0$model
   
   
-  Result <- list("RF" = RF.result[, c("gain", "gain_ratio", "gini")],
-                 "DT" = DT.result[, c("gain", "gain_ratio", "gini")],
-                 "KNN" = KNN.result[, c("gain", "gain_ratio", "gini")],
-                 "LM" = LM.result[, c("gain", "gain_ratio", "gini")],
-                 "Lasso" = Lasso.result[, c("gain", "gain_ratio", "gini")],
+  Result <- list("RF" = RF.result[, "gain_ratio"],
+                 "DT" = DT.result[, "gain_ratio"],
+                 "KNN" = KNN.result[, "gain_ratio"],
+                 "LM" = LM.result[,"gain_ratio"],
+                 "Lasso" = Lasso.result[,"gain_ratio"],
                  "model" = MODEl)
+  
+  return(Result)
+}
+UpliftModule <- function(Train_Ypre1, Train_Ypre0, Valid_Ypre1, Valid_Ypre0, TargetVar, TreatVar){
+  
+  # predict separately
+  ModelYpre1 <- UpliftMethod(train = Train_Ypre1, valid = Valid_Ypre1, y = TargetVar, treatment = TreatVar)
+  ModelYpre0 <- UpliftMethod(train = Train_Ypre0, valid = Valid_Ypre0, y = TargetVar, treatment = TreatVar)
+  
+  # gathering the result
+  
+  RF.result <- SepPerform(ResYpre1 = ModelYpre1$RF, ResYpre0 = ModelYpre0$RF,
+                          TargetVarYpre1 = ModelYpre1$y, TargetVarYpre0 = ModelYpre0$y,
+                          TreatVarYpre1 = ModelYpre1$ct, TreatVarYpre0 = ModelYpre0$ct)
+  
+  DT.result <- SepPerform(ResYpre1 = ModelYpre1$DT, ResYpre0 = ModelYpre0$DT,
+                          TargetVarYpre1 = ModelYpre1$y, TargetVarYpre0 = ModelYpre0$y,
+                          TreatVarYpre1 = ModelYpre1$ct, TreatVarYpre0 = ModelYpre0$ct)
+  
+  
+  KNN.result <- SepPerform(ResYpre1 = ModelYpre1$KNN, ResYpre0 = ModelYpre0$KNN,
+                           TargetVarYpre1 = ModelYpre1$y, TargetVarYpre0 = ModelYpre0$y,
+                           TreatVarYpre1 = ModelYpre1$ct, TreatVarYpre0 = ModelYpre0$ct)
+  
+  
+  Result <- list("RF" = RF.result[, "gain_ratio"],
+                 "DT" = DT.result[, "gain_ratio"],
+                 "KNN" = KNN.result[, "gain_ratio"])
   
   return(Result)
 }
@@ -564,4 +690,8 @@ valid_dt <- data[-index,]
 #a <- TmaMethod(Data = Data_Preprocess, y = "MOVED_AD_NUM", treatment = "MESSAGE_A")
 
 #a <- OmaMethod(Data = Data_Preprocess, y = "MOVED_AD_NUM", treatment = "MESSAGE_A")
+
+#a <- Group_SepUplift(data = voter.1.1.7.3, index = resample.voter.1.1.7.3[,1:2], 
+#                     TargetVar = "MOVED_AD_NUM", TreatVar = "MESSAGE_A",Ypre = "POLITICALC")
+
 
