@@ -20,39 +20,36 @@ readline(prompt = crayon::cyan('Please insert the number of cores you would like
 
 
 #### functional model
-#plot_resample_line<-function(sample_i) {
-  lines(x = seq(0,100, by=10), y = sample_i, type = "l" , col=rgb(1, 0.0, 0.0, 0.01))
-  return(mean(sample_i))
-}
 
 
-plot_bootstrap<-function(dat, main_title, ylim_range){
-  if(is.null(ncol(dat))==TRUE ){
+
+#plot_bootstrap<-function(dat, main_title, ylim_range){
+#  if(is.null(ncol(dat))==TRUE ){
     
     # only one group of observations
-    plot(x = seq(0,100, by=100/(length(dat)-1)), y=dat, type="b",col="gray" ,main=main_title,
-         ylab="Cumulative Incremental Gains", xlab="Proportion of population targeted (%)", ylim=ylim_range)
+#    plot(x = seq(0,100, by=100/(length(dat)-1)), y=dat, type="b",col="gray" ,main=main_title,
+#         ylab="Cumulative Incremental Gains", xlab="Proportion of population targeted (%)", ylim=ylim_range)
     
-    lines(seq(0,100,100/(length(dat)-1)), seq(0,1,1/(length(dat)-1)), type = "l", col="black")
-  } else{
+#    lines(seq(0,100,100/(length(dat)-1)), seq(0,1,1/(length(dat)-1)), type = "l", col="black")
+#  } else{
     
     # multiple groups of observations
-    plot(x = seq(0,100, by=100/(nrow(dat)-1)), y=dat[, 1], type="l", lwd=0,main=main_title, 
-         ylab="Cumulative Incremental Gains", xlab="Proportion of population targeted (%)", ylim=ylim_range)
-    for (i  in c(1:ncol(dat))) {
-      lines(x = seq(0,100, by=100/(nrow(dat)-1)), y= dat[, i] , type="b",col="gray")
-    }
+#    plot(x = seq(0,100, by=100/(nrow(dat)-1)), y=dat[, 1], type="l", lwd=0,main=main_title, 
+#         ylab="Cumulative Incremental Gains", xlab="Proportion of population targeted (%)", ylim=ylim_range)
+#    for (i  in c(1:ncol(dat))) {
+#      lines(x = seq(0,100, by=100/(nrow(dat)-1)), y= dat[, i] , type="b",col="gray")
+#    }
     
     #conf_97.5 <- apply(dat, 1, function(x)quantile(x, .975))
     #conf_2.5 <- apply(dat, 1, function(x) quantile(x, .025))
-    mean_gain<-apply(dat, 1, mean)
+#    mean_gain<-apply(dat, 1, mean)
     
     #lines(seq(0,100,100/(nrow(dat)-1)), conf_2.5, type = "l", col="black", lty="dashed", lwd=1)
     #lines(seq(0,100,100/(nrow(dat)-1)), conf_97.5, type = "l", col="black", lty="dashed", lwd=1)
-    lines(seq(0,100,100/(nrow(dat)-1)), mean_gain, type = "l", col="tomato", lwd=1)
-    lines(seq(0,100,100/(nrow(dat)-1)), seq(0,1,1/(nrow(dat)-1)), type = "l", col="black")
-  }  
-}
+#    lines(seq(0,100,100/(nrow(dat)-1)), mean_gain, type = "l", col="tomato", lwd=1)
+#    lines(seq(0,100,100/(nrow(dat)-1)), seq(0,1,1/(nrow(dat)-1)), type = "l", col="black")
+#  }  
+#}
                                 # plot for bootstrap
 
 
@@ -173,30 +170,32 @@ originFormula <- function(data, y, treatment, treat_include=TRUE){
 #  lines(seq(0,100,10), seq(0,1,0.1), type = "l", col="black")
 #}                    # plot for bootstrap
 
-plot_bootstrap_gini<-function(dat, main_title, ylim){
-  colnames(dat)<- c(paste("ex", seq(1,ncol(dat), by = 1), sep = "."))
-  rownames(dat)<- c(paste("gini", seq(0, 100, by = 10), sep="_"))
-  dat[-1,]%>%
-    t()%>%
-    boxplot(main=main_title, ylim=ylim)
-}                     # plot for gini
-uplift.dt.size<-function(dat, treatment, response, time_of_size){
-  t1_y1<-dat[sample(which(treatment==1 & response==1), length(which(treatment==1 & response==1))*time_of_size),]
-  t1_y0<-dat[sample(which(treatment==1 & response==0), length(which(treatment==1 & response==0))*time_of_size),]
-  t0_y1<-dat[sample(which(treatment==0 & response==1), length(which(treatment==0 & response==1))*time_of_size),]
-  t0_y0<-dat[sample(which(treatment==0 & response==0), length(which(treatment==0 & response==0))*time_of_size),]
+#plot_bootstrap_gini<-function(dat, main_title, ylim){
+#  colnames(dat)<- c(paste("ex", seq(1,ncol(dat), by = 1), sep = "."))
+#  rownames(dat)<- c(paste("gini", seq(0, 100, by = 10), sep="_"))
+#  dat[-1,]%>%
+#    t()%>%
+#    boxplot(main=main_title, ylim=ylim)
+#}                     # plot for gini
+#uplift.dt.size<-function(dat, treatment, response, time_of_size){
+#  t1_y1<-dat[sample(which(treatment==1 & response==1), length(which(treatment==1 & response==1))*time_of_size),]
+#  t1_y0<-dat[sample(which(treatment==1 & response==0), length(which(treatment==1 & response==0))*time_of_size),]
+#  t0_y1<-dat[sample(which(treatment==0 & response==1), length(which(treatment==0 & response==1))*time_of_size),]
+#  t0_y0<-dat[sample(which(treatment==0 & response==0), length(which(treatment==0 & response==0))*time_of_size),]
+#  
+#  new_dt<-t1_y1%>%
+#    rbind(.,t1_y0 )%>%
+#    rbind(., t0_y1)%>%
+#    rbind(., t0_y0) 
   
-  new_dt<-t1_y1%>%
-    rbind(.,t1_y0 )%>%
-    rbind(., t0_y1)%>%
-    rbind(., t0_y0) 
+#  size<-matrix(c(t1_y1%>%nrow(),t1_y0%>%nrow(), t0_y1%>%nrow(), t0_y0%>%nrow() ), 
+#               nrow = 4, ncol = 1, dimnames = list(c("t1_y1", "t1_y0", "t0_y1", "t0_y0")))
   
-  size<-matrix(c(t1_y1%>%nrow(),t1_y0%>%nrow(), t0_y1%>%nrow(), t0_y0%>%nrow() ), 
-               nrow = 4, ncol = 1, dimnames = list(c("t1_y1", "t1_y0", "t0_y1", "t0_y0")))
-  
-  res<-list(new_dt = new_dt, size= size)
-  return(res)
-}         # tune the size of data (larger/smaller)
+#  res<-list(new_dt = new_dt, size= size)
+#  return(res)
+#}      
+
+# tune the size of data (larger/smaller)
 bootstrap.dt<-function(treatment, response, n_booststrap){
   t1_y1<-which(treatment==1 & response==1)%>% as.matrix()
   t1_y0<-which(treatment==1 & response==0)%>% as.matrix()
