@@ -139,16 +139,16 @@ Group_Uplift <- function(data, index, TargetVar, TreatVar, interaction = FALSE){
   }
   
   for (i in c(1:ncol(index))) {
+    Data <- Null
     trainIdx<-index[,i]
     
     # data for y and treatment is factor (Tma and Oma adapt this)
-    data[, TreatVar] <- factor(data[, TreatVar], levels = c(0,1))
-    data[, TargetVar] <- factor(data[, TargetVar], levels = c(0,1))
+    Data <- data
+    Data[, TreatVar] <- factor(Data[, TreatVar], levels = c(0,1))
+    Data[, TargetVar] <- factor(Data[, TargetVar], levels = c(0,1))
     
-    train <- data[trainIdx,]
-    valid <- data[-trainIdx,]
-    
-    print("Ypre Separation :: OK")
+    train <- Data[trainIdx,]
+    valid <- Data[-trainIdx,]
     
     cat(crayon::blue(sprintf('One Model Appraoch:: Boostrap %s start \n', i)))
     
@@ -206,22 +206,26 @@ Group_Uplift <- function(data, index, TargetVar, TreatVar, interaction = FALSE){
 # OneModel  [Boolean]: Transform the data for One Model Approahc (True)/Two Model Approach (FALSE)
 DataTransform<- function(trainData, validData, OneModel=TRUE, y, treatment, interaction =FALSE){
   
+  train <- NULL
+  valid <- NULL
+  
   if (OneModel==TRUE) {
     # One Model Appraoch
     #### DT, RF, Lm
     # Train 
-    trainData
+    train <- trainData
     
     # Validation
     # treatment=1
-    valid_T1<-validData
+    valid <- validData
+    valid_T1 <- valid
     valid_T1[, treatment]<-1
     valid_T1[, treatment]<-factor(valid_T1[, treatment], levels = c(0,1))
     
     print("Validation For treatment= 1 :: Success")
     
     # treatment= 0
-    valid_T0<-validData
+    valid_T0<-valid
     valid_T0[, treatment]<-0
     valid_T0[, treatment]<-factor(valid_T0[, treatment], levels = c(0,1))
     
@@ -232,17 +236,17 @@ DataTransform<- function(trainData, validData, OneModel=TRUE, y, treatment, inte
     
     #### KNN
     # Train
-    factorCol <- names(trainData)[ sapply(trainData, is.factor) ]
+    factorCol <- names(train)[ sapply(train, is.factor) ]
     
     # normalized train data (do not normalize the type of factor)
-    train_dt.norm<- trainData
-    norm.value<-preProcess(trainData[, -which(colnames(trainData) %in% factorCol)], method = c("center", "scale")) 
-    train_dt.norm[,-which(colnames(train_dt.norm) %in% factorCol)]<-predict(norm.value, trainData[, -which(colnames(trainData) %in% factorCol)])
+    train_dt.norm<- train
+    norm.value<-preProcess(train[, -which(colnames(train) %in% factorCol)], method = c("center", "scale")) 
+    train_dt.norm[,-which(colnames(train_dt.norm) %in% factorCol)]<-predict(norm.value, train[, -which(colnames(train) %in% factorCol)])
     
     # create dummy
     form <- originFormula(train_dt.norm, y = y, treatment = treatment)
     TraindummyData <- model.matrix(form, train_dt.norm)
-    TraindummyData <- cbind(as.data.frame(TraindummyData), y=trainData[,y])[,-1]
+    TraindummyData <- cbind(as.data.frame(TraindummyData), y=train[,y])[,-1]
     
     
     # Validation
@@ -274,9 +278,9 @@ DataTransform<- function(trainData, validData, OneModel=TRUE, y, treatment, inte
     # Lasso/Lm preprocess
     ## Transform to dummies
     # Train
-    Lm.form <- originFormula(trainData, y = y, treatment = treatment)
+    Lm.form <- originFormula(train, y = y, treatment = treatment)
     
-    TrainLmData <- model.matrix(Lm.form, trainData)
+    TrainLmData <- model.matrix(Lm.form, train)
     
     # Valid
     ValidLmT1 <- model.matrix(Lm.form, valid_T1)
@@ -294,11 +298,11 @@ DataTransform<- function(trainData, validData, OneModel=TRUE, y, treatment, inte
     
     
     if (interaction == TRUE) {
-      Lm.form <- interactFormula(data, y = y, treatment = treatment)
+      Lm.form <- interactFormula(data = valid, y = y, treatment = treatment)
       print("Interaction for Lasso/LM :: Start")
       
       # Train
-      IntTrainData <- model.matrix(Lm.form, trainData)
+      IntTrainData <- model.matrix(Lm.form, train)
       
       # Valid
       # Treatment =1
@@ -315,13 +319,13 @@ DataTransform<- function(trainData, validData, OneModel=TRUE, y, treatment, inte
       
       print("LM/Lasso Data Transformation :: Success")
       
-      Train <- list("Origin" = trainData, "KNN" =TraindummyData, "Lasso"=TrainLmData, "IntAct" = IntTrainData)
+      Train <- list("Origin" = train, "KNN" =TraindummyData, "Lasso"=TrainLmData, "IntAct" = IntTrainData)
       Valid <- list("Origin" = OriginDataCollect, "KNN" = KNNDataCollect, "Lasso"= LassoDataCollect, "IntAct"=IntDataCollect,
-                    "y" = validData[, y], "ct" =validData[, treatment])
+                    "y" = valid[, y], "ct" =valid[, treatment])
       Data <- list("Train" =Train, "Valid" = Valid)
     }else{
-      Train <- list("Origin" = trainData, "KNN" =TraindummyData, "Lasso"=TrainLmData)
-      Valid <- list("Origin" = OriginDataCollect, "KNN" = KNNDataCollect, "Lasso"= LassoDataCollect, "y" = validData[, y], "ct" =validData[, treatment])
+      Train <- list("Origin" = train, "KNN" =TraindummyData, "Lasso"=TrainLmData)
+      Valid <- list("Origin" = OriginDataCollect, "KNN" = KNNDataCollect, "Lasso"= LassoDataCollect, "y" = valid[, y], "ct" =valid[, treatment])
       Data <- list("Train" =Train, "Valid" = Valid)
     }
     
@@ -332,40 +336,40 @@ DataTransform<- function(trainData, validData, OneModel=TRUE, y, treatment, inte
     # Two Model Approach
     
     ### DT, RF, LM
-    
+    train <- trainData
     # Train
     # Treatment =1
-    train_T1<-trainData[ which(trainData[,treatment]==1)  ,-which(colnames(trainData)== treatment)]
+    train_T1<-train[ which(train[,treatment]==1)  ,-which(colnames(train)== treatment)]
     print("Training Data Treatment =1 :: OK")
     
     # Treatment =0
-    train_T0<-trainData[ which(trainData[,treatment]==0)  ,-which(colnames(trainData)== treatment)]
+    train_T0<-train[ which(train[,treatment]==0)  ,-which(colnames(train)== treatment)]
     print("Training Data Treatment =0 :: OK")
     
     OriginDataCollect <- list("T0" =train_T0, "T1"= train_T1)
     
     # Valid
-    validData
+    valid <- validData
     print("Data Type Change:: Success")
     
     ### KNN
     # Train
-    factorCol <- names(trainData)[ sapply(trainData, is.factor) ]
+    factorCol <- names(train)[ sapply(train, is.factor) ]
     
     # normalized train data (do not normalize the type of factor)
-    train_dt.norm<- trainData
-    norm.value<-preProcess(trainData[, -which(colnames(trainData) %in% factorCol)], method = c("center", "scale")) 
-    train_dt.norm[,-which(colnames(train_dt.norm) %in% factorCol)]<-predict(norm.value, trainData[, -which(colnames(trainData) %in% factorCol)])
+    train_dt.norm<- train
+    norm.value<-preProcess(train[, -which(colnames(train) %in% factorCol)], method = c("center", "scale")) 
+    train_dt.norm[,-which(colnames(train_dt.norm) %in% factorCol)]<-predict(norm.value, train[, -which(colnames(train) %in% factorCol)])
     
-    valid_dt.norm<- validData
-    valid_dt.norm[,-which(colnames(valid_dt.norm) %in% factorCol)]<-predict(norm.value, validData[, -which(colnames(validData) %in% factorCol)])
+    valid_dt.norm<- valid
+    valid_dt.norm[,-which(colnames(valid_dt.norm) %in% factorCol)]<-predict(norm.value, valid[, -which(colnames(valid) %in% factorCol)])
     
     
     # create dummy
     form <- originFormula(train_dt.norm, y = y, treatment = treatment)
     
     TraindummyData <- model.matrix(form, train_dt.norm)
-    TraindummyDataWithY <- cbind(as.data.frame(TraindummyData), y=trainData[,y])[,-1]
+    TraindummyDataWithY <- cbind(as.data.frame(TraindummyData), y=train[,y])[,-1]
     
     ValiddummyData <- model.matrix(form, valid_dt.norm)
     ValiddummyData <- as.data.frame(ValiddummyData)[,-1]
@@ -388,10 +392,10 @@ DataTransform<- function(trainData, validData, OneModel=TRUE, y, treatment, inte
     
     ### Lasso
     # Train
-    Lm.form <- originFormula(trainData, y = y, treatment = treatment)
+    Lm.form <- originFormula(train, y = y, treatment = treatment)
     
     dummyTreat <- paste0(treatment,"1")
-    TrainLmData <- model.matrix(Lm.form, trainData)
+    TrainLmData <- model.matrix(Lm.form, train)
     TrainLmData <- TrainLmData[,-which(colnames(TrainLmData) == "(Intercept)")]
     
     # treatment = 1
@@ -407,34 +411,23 @@ DataTransform<- function(trainData, validData, OneModel=TRUE, y, treatment, inte
     print("Lm/Lasso Training Data Treatment =0 :: OK")
     # Valid
     
-    ValidLmData <- model.matrix(Lm.form, validData)
+    ValidLmData <- model.matrix(Lm.form, valid)
     ValidLmData <- ValidLmData[,-which(colnames(ValidLmData) %in% c(dummyTreat, "(Intercept)"))]
     
     print("Lasso Data Transformation :: Success")
     
     
-    
-    
-    
-    
-    
-    
-    
-    #########
-    ##########
-    ############
-    ########
     if (interaction == TRUE) {
-      Lm.form <- interactFormula(data, y = y, treatment = treatment)
+      Lm.form <- interactFormula(data = train, y = y, treatment = treatment)
       print("Interaction for Lasso/LM :: Start")
       
       # Data Convert to dummy
-      TrainData <- model.matrix(Lm.form, trainData)
-      ValidData <- model.matrix(Lm.form, validData)
+      TrainData <- model.matrix(Lm.form, train)
+      ValidData <- model.matrix(Lm.form, valid)
       
       # Paste with y
-      IntTrainData <-  cbind(as.data.frame(TrainData), y=trainData[,y])
-      IntValidData <-  cbind(as.data.frame(ValidData), y=validData[,y])
+      IntTrainData <-  cbind(as.data.frame(TrainData), y=train[,y])
+      IntValidData <-  cbind(as.data.frame(ValidData), y=valid[,y])
       
       dummyTreat <- paste0(treatment,"1")
       
@@ -455,19 +448,19 @@ DataTransform<- function(trainData, validData, OneModel=TRUE, y, treatment, inte
       print("LM/Lasso Data Transformation :: Success")
       
       
-      Train <- list("Origin" = trainData, "KNN" =TraindummyData, "Lasso"=TrainLmData, "IntAct" = IntTrainData)
+      Train <- list("Origin" = train, "KNN" =TraindummyData, "Lasso"=TrainLmData, "IntAct" = IntTrainData)
       Valid <- list("Origin" = OriginDataCollect, "KNN" = KNNDataCollect, "Lasso"= LassoDataCollect, "IntAct"=IntDataCollect,
-                    "y" = validData[, y], "ct" =validData[, treatment])
+                    "y" = valid[, y], "ct" =valid[, treatment])
       
       
       Train <- list("Origin" = OriginDataCollect, "KNN" = KNNDataCollect, "Lasso"= LassoDataCollect, "IntAct"= IntDataCollect)
-      Valid <- list("Origin" = validData, "KNN" =ValiddummyData, "Lasso"=ValidLmData, "IntAct"=IntValidData,
-                    "y" = validData[, y], "ct" = validData[, treatment])
+      Valid <- list("Origin" = valid, "KNN" =ValiddummyData, "Lasso"=ValidLmData, "IntAct"=IntValidData,
+                    "y" = valid[, y], "ct" = valid[, treatment])
       
       Data <- list("Train" =Train, "Valid" = Valid)
     }else{
       Train <- list("Origin" = OriginDataCollect, "KNN" = KNNDataCollect, "Lasso"= LassoDataCollect)
-      Valid <- list("Origin" = validData, "KNN" =ValiddummyData, "Lasso"=ValidLmData, "y" = validData[, y], "ct" = validData[, treatment])
+      Valid <- list("Origin" = valid, "KNN" =ValiddummyData, "Lasso"=ValidLmData, "y" = valid[, y], "ct" = valid[, treatment])
       Data <- list("Train" =Train, "Valid" = Valid)
     }
     
@@ -670,7 +663,7 @@ OmaMethod <- function(Data, y, treatment, interaction = FALSE){
   
   if(interaction == TRUE){
     # LM
-    IntLm.form <- interactFormula(data, y = y, treatment = treatment)
+    IntLm.form <- interactFormula(data = Data$Train$Origin, y = y, treatment = treatment)
     IntLm.model<-glm(IntLm.form, data = Data$Train$Origin, family = binomial(link='logit'))                              
     
     
@@ -1099,7 +1092,13 @@ SepUpliftModule <- function(Train_Ypre1, Train_Ypre0, Valid_Ypre1, Valid_Ypre0, 
 
 OmaModule <- function(TrainData, ValidData, TargetVar, TreatVar, Interaction){
   # transform data
-  Data_Collect <- DataTransform(trainData =TrainData, validData = ValidData, OneModel = TRUE, y = TargetVar, treatment = TreatVar,interaction = Interaction)
+  train <- NULL
+  valid <- NULL
+  
+  train <- TrainData
+  valid <- ValidData
+  
+  Data_Collect <- DataTransform(trainData =train, validData = valid, OneModel = TRUE, y = TargetVar, treatment = TreatVar,interaction = Interaction)
   
   # predict separately
   Model <- OmaMethod(Data_Collect, y = TargetVar, treatment = TreatVar, interaction = Interaction)
