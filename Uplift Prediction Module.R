@@ -1,3 +1,9 @@
+# TargetVar [Factor]: Outcome Variable
+# TreatVar  [Factor]: Treatment Variable
+# Ypre      [Factor]: Ypre Variable
+# data      [Data.Frame]: Data for analyzing
+# index     [Data.Frame]: Data for training index in ncol (# of bootstrap)
+
 #### Group Uplift Prediction
 Sep_Group_Uplift <- function(data, index, TargetVar, TreatVar, Ypre){
   
@@ -166,10 +172,10 @@ Group_Uplift <- function(data, index, TargetVar, TreatVar, interaction = FALSE){
     
     if(interaction == TRUE){
       model_collector$Oma$IntLm$gainRatio[(1:length(OmaResult$IntLm)),i] <- OmaResult$IntLm
-      model_collector$Oma$IntLasso$gainRatio[(1:length(OmaResult$IntLm)),i] <- OmaResult$IntLasso
+      model_collector$Oma$IntLasso$gainRatio[(1:length(OmaResult$IntLasso)),i] <- OmaResult$IntLasso
       
-      model_collector$Tma$IntLm$gainRatio[(1:length(OmaResult$IntLm)),i] <- TmaResult$IntLm
-      model_collector$Tma$IntLasso$gainRatio[(1:length(OmaResult$IntLm)),i] <- TmaResult$IntLasso
+      model_collector$Tma$IntLm$gainRatio[(1:length(TmaResult$IntLm)),i] <- TmaResult$IntLm
+      model_collector$Tma$IntLasso$gainRatio[(1:length(TmaResult$IntLasso)),i] <- TmaResult$IntLasso
     }
     
     #UpliftResult <- UpliftModule(TrainData = train,ValidData = valid, TargetVar = TargetVar, TreatVar = TreatVar, Interaction = interaction)
@@ -195,6 +201,9 @@ Group_Uplift <- function(data, index, TargetVar, TreatVar, interaction = FALSE){
 }
 
 #### Function
+# trainData [Data.Frame]: Training Data
+# validData [Data.Frame]: Validation Data
+# OneModel  [Boolean]: Transform the data for One Model Approahc (True)/Two Model Approach (FALSE)
 DataTransform<- function(trainData, validData, OneModel=TRUE, y, treatment, interaction =FALSE){
   
   if (OneModel==TRUE) {
@@ -466,6 +475,13 @@ DataTransform<- function(trainData, validData, OneModel=TRUE, y, treatment, inte
   }
 }
 
+# ResYpre1       [Data.Frame]: Result of Probability under T=1/0 given the Ypre =0
+# ResYpre0       [Data.Frame]: Result of Probability under T=1/0 given the Ypre =1
+# TreatVarYpre1  [string]: Treatment Variable given the Ypre =1
+# TreatVarYpre0  [string]: Treatment Variable given the Ypre =0
+# TargetVarYpre1 [string]: Outcome Variable given the Ypre =1
+# TargetVarYpre0 [string]: Outcome Variable given the Ypre =0
+
 
 SepPerform <- function(ResYpre1, ResYpre0, TargetVarYpre1, TargetVarYpre0, TreatVarYpre1, TreatVarYpre0){
   Ypre1 <- cbind(ResYpre1, y =TargetVarYpre1, ct = TreatVarYpre1)
@@ -482,6 +498,98 @@ SepPerform <- function(ResYpre1, ResYpre0, TargetVarYpre1, TargetVarYpre0, Treat
   result<-upliftDecile(perf)
   
 }
+
+### decile result
+upliftDecile <- function(data){
+  experiment<-data.frame("k"=c(0,seq(1,nrow(data),by = 1)), "n_t"=c(0,data[,2]),"n_c"=c(0,data[,3]),
+                         "n_t.y1"=c(0,data[,4]), "n_c.y1"= c(0,data[,5]), 
+                         "r_t.y1"=c(0,data[,6]), "r_c.y1"=c(0,data[,7]) ,"u_k"=c(0,data[,8]),
+                         "cum.n_t"= c(0,cumsum(data[,2])),"cum.n_c"= c(0,cumsum(data[,3])),
+                         "cum.n_t.y1"= c(0,cumsum(data[,4])),"cum.n_c.y1"= c(0,cumsum(data[,5])))%>%
+    mutate(cum.r_t.y1 = (cum.n_t.y1/cum.n_t)%>% replace(., is.na(.),0))%>%
+    mutate(cum.r_c.y1 = (cum.n_c.y1/cum.n_c)%>% replace(., is.na(.),0))%>%
+    mutate(U_k = cum.r_t.y1 - cum.r_c.y1 )%>%
+    mutate(gain = U_k*(cum.n_t + cum.n_c))%>%
+    mutate(gain_ratio = gain/gain[length(k)])%>%
+    mutate(gini=cumsum(U_k/U_k[length(U_k)] - cum.n_t/cum.n_t[length(cum.n_t)]))
+  
+  return(experiment)
+}
+
+#KNN prediction and probability collector
+KnnPrediction <- function(data){
+  
+  # collect the classification and the probability together
+  data=data.frame(Prediction = data%>% as.numeric(),
+                  Prob = attr(data, "prob"))%>%
+    mutate(PredictionCounter = 1 - Prediction,
+           ProbCounter = 1- Prob)
+  
+  # create a new data frame for storing
+  collectDT <- as.data.frame(matrix(nrow = nrow(data), ncol = 2))
+  colnames(collectDT) <- c("1", "0")
+  
+  for (i in c(1:nrow(data))) {
+    
+    if (data[i,"Prediction"] ==1) {
+      collectDT[i,"1"] <- data[i,"Prob"]
+      collectDT[i,"0"] <- data[i,"ProbCounter"]
+    }else{
+      collectDT[i,"0"] <- data[i,"Prob"]
+      collectDT[i,"1"] <- data[i,"ProbCounter"]
+    }
+    
+  }
+  return(collectDT)
+}
+
+
+# formula with/without interaction
+# y             [string]: Outcome Variable
+# treatment     [string]: Treatment Variable
+# treat_include [Boolean]: Include the treatment variable in equation or not (Two Model Apprach-> treat_include =FALSE)
+interactFormula <- function(data, y, treatment, treat_include=TRUE){
+  
+  # first create the formuala without interaction ex. y~ a+b+c
+  # create the interactino term                   ex. treat*a + treat*b + treat*c
+  # combine the two part into one formula         ex. y~ a + b + c + treat*a + treat*b + treat*c
+  
+  if(treat_include == TRUE){
+    paste(paste(y, paste(colnames(data[, -which(colnames(data) ==y)]), collapse = "+"), sep = "~"), 
+          paste(treatment, c(colnames(data[, -which(colnames(data) %in% c(y,treatment))])), collapse ="+", sep = "*")
+          , sep = "+") %>%
+      as.formula()%>%
+      return()
+  }else{
+    paste(paste(y, paste(colnames(data[, -which(colnames(data) %in% c(treatment, y))]), collapse = "+"), sep = "~"), 
+          paste(treatment, c(colnames(data[, -which(colnames(data) %in% c(y,treatment))])), collapse ="+", sep = "*")
+          , sep = "+") %>%
+      as.formula()%>%
+      return()
+  }
+  
+  
+  
+}
+originFormula <- function(data, y, treatment, treat_include=TRUE){
+  
+  if (treat_include==TRUE) {
+    paste(paste(y, paste(colnames(data[, -which(colnames(data) ==y)]), collapse = "+"), sep = "~")) %>%
+      as.formula()%>%
+      return()
+  }else{
+    paste(paste(y, paste(colnames(data[, -which(colnames(data) %in% c(y, treatment))]), collapse = "+"), sep = "~")) %>%
+      as.formula()%>%
+      return()
+  }
+  
+}
+
+#interactFormula(voter.1.1.1.1, y = "MOVED_AD_NUM", treatment = "MESSAGE_A", treat_include = FALSE)
+#originFormula(voter.1.1.1.1, y ="MOVED_AD_NUM", treatment ="MESSAGE_A", treat_include = FALSE)
+
+
+
 
 #### Models
 OmaMethod <- function(Data, y, treatment, interaction = FALSE){
@@ -1156,7 +1264,7 @@ UpliftModule <- function(TrainData, ValidData, TargetVar, TreatVar){
 #train_dt <- data[index,]
 #valid_dt <- data[-index,]
 
-#a <- DataTransform(trainData = train_dt, validData = valid_dt, OneModel = FALSE, y = "MOVED_AD_NUM", treatment = "MESSAGE_A")
+#a <- DataTransform(trainData = train_dt, validData = valid_dt, OneModel = TRUE, y = "MOVED_AD_NUM", treatment = "MESSAGE_A", interaction = TRUE)
 #b <- UpliftMethod(train = train_dt, valid = valid_dt, y = "MOVED_AD_NUM", treatment = "MESSAGE_A")
 #c <- OmaModule(TrainData = train_dt, ValidData = valid_dt, TargetVar = "MOVED_AD_NUM", TreatVar = "MESSAGE_A", Interaction = TRUE)
 #d <- Group_Uplift(data = voter.1.1.1.1, index = resample.voter.1.1.1.1[,1:2], TargetVar = "MOVED_AD_NUM", TreatVar = "MESSAGE_A", interaction = TRUE)
