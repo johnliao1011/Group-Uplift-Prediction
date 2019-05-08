@@ -5,7 +5,7 @@
 # index     [Data.Frame]: Data for training index in ncol (# of bootstrap)
 
 #### Group Uplift Prediction
-Sep_Group_Uplift <- function(data, index, TargetVar, TreatVar, Ypre){
+Sep_Group_Uplift <- function(data, index, TargetVar, TreatVar, Ypre, interaction){
   
   res_gain.ratio<-matrix(nrow = 11, ncol = ncol(index), vector())%>% data.frame()
   model_template <- list('gainRatio' = res_gain.ratio)
@@ -14,7 +14,9 @@ Sep_Group_Uplift <- function(data, index, TargetVar, TreatVar, Ypre){
                          'KNN'= model_template,
                          'Lm'= model_template,
                          "Lasso" = model_template,
-                         "model" = NULL)
+                         "IntLm" = model_template,
+                         "IntLasso" = model_template,
+                         "model" = list("NoInt" =NULL, "Int" =NULL))
   
   uplift_approach <- list('RF'= model_template,
                           'DT'= model_template,
@@ -57,7 +59,7 @@ Sep_Group_Uplift <- function(data, index, TargetVar, TreatVar, Ypre){
     
     OmaResult <- SepOmaModule(Train_Ypre1 = trainYpre1, Train_Ypre0 = trainYpre0,
                               Valid_Ypre1 = validYpre1, Valid_Ypre0 = validYpre0,
-                              TargetVar = TargetVar, TreatVar = TreatVar)
+                              TargetVar = TargetVar, TreatVar = TreatVar, Interaction = interaction)
     
     model_collector$Oma$RF$gainRatio[(1:length(OmaResult$RF)),i] <- OmaResult$RF
     model_collector$Oma$DT$gainRatio[(1:length(OmaResult$DT)),i] <- OmaResult$DT
@@ -69,7 +71,7 @@ Sep_Group_Uplift <- function(data, index, TargetVar, TreatVar, Ypre){
     
     TmaResult <- SepTmaModule(Train_Ypre1 = trainYpre1, Train_Ypre0 = trainYpre0,
                               Valid_Ypre1 = validYpre1, Valid_Ypre0 = validYpre0,
-                              TargetVar = TargetVar, TreatVar = TreatVar)
+                              TargetVar = TargetVar, TreatVar = TreatVar, Interaction = interaction)
     
     model_collector$Tma$RF$gainRatio[(1:length(TmaResult$RF)),i] <- TmaResult$RF
     model_collector$Tma$DT$gainRatio[(1:length(TmaResult$DT)),i] <- TmaResult$DT
@@ -77,20 +79,29 @@ Sep_Group_Uplift <- function(data, index, TargetVar, TreatVar, Ypre){
     model_collector$Tma$Lm$gainRatio[(1:length(TmaResult$LM)),i] <- TmaResult$LM
     model_collector$Tma$Lasso$gainRatio[(1:length(TmaResult$Lasso)),i] <- TmaResult$Lasso
     
-    UpliftResult <- SepUpliftModule(Train_Ypre1 = trainYpre1, Train_Ypre0 = trainYpre0,
-                                    Valid_Ypre1 = validYpre1, Valid_Ypre0 = validYpre0,
-                                    TargetVar = TargetVar, TreatVar = TreatVar)
+    #UpliftResult <- SepUpliftModule(Train_Ypre1 = trainYpre1, Train_Ypre0 = trainYpre0,
+    #                                Valid_Ypre1 = validYpre1, Valid_Ypre0 = validYpre0,
+    #                                TargetVar = TargetVar, TreatVar = TreatVar)
     
-    model_collector$Uplift$RF$gainRatio[(1:length(UpliftResult$RF)),i] <- UpliftResult$RF
-    model_collector$Uplift$DT$gainRatio[(1:length(UpliftResult$DT)),i] <- UpliftResult$DT
-    model_collector$Uplift$KNN$gainRatio[(1:length(UpliftResult$KNN)),i] <- UpliftResult$KNN
-    model_collector$Uplift$Lm$gainRatio[(1:length(UpliftResult$LM)),i] <- UpliftResult$LM
-    model_collector$Uplift$Lasso$gainRatio[(1:length(UpliftResult$Lasso)),i] <- UpliftResult$Lasso
+    #model_collector$Uplift$RF$gainRatio[(1:length(UpliftResult$RF)),i] <- UpliftResult$RF
+    #model_collector$Uplift$DT$gainRatio[(1:length(UpliftResult$DT)),i] <- UpliftResult$DT
+    #model_collector$Uplift$KNN$gainRatio[(1:length(UpliftResult$KNN)),i] <- UpliftResult$KNN
+    #model_collector$Uplift$Lm$gainRatio[(1:length(UpliftResult$LM)),i] <- UpliftResult$LM
+    #model_collector$Uplift$Lasso$gainRatio[(1:length(UpliftResult$Lasso)),i] <- UpliftResult$Lasso
     
+    if(interaction == TRUE){
+      model_collector$Oma$IntLm$gainRatio[(1:length(OmaResult$IntLm)),i] <- OmaResult$IntLm
+      model_collector$Oma$IntLasso$gainRatio[(1:length(OmaResult$IntLasso)),i] <- OmaResult$IntLasso
+      
+      model_collector$Tma$IntLm$gainRatio[(1:length(TmaResult$IntLm)),i] <- TmaResult$IntLm
+      model_collector$Tma$IntLasso$gainRatio[(1:length(TmaResult$IntLasso)),i] <- TmaResult$IntLasso
+    }
     if(i ==1){
       model_collector$Oma$model <- OmaResult$model
       model_collector$Tma$model <- TmaResult$model
       
+      model_collector$Oma$model$Int <- OmaResult$Int_model
+      model_collector$Tma$model$Int <- TmaResult$Int_model
     }
   }
   
@@ -695,7 +706,7 @@ OmaMethod <- function(Data, y, treatment, interaction = FALSE){
     IntModel <- list("Lm" =IntLm.model, "Lasso" =Intcv.fit)
     
     model_result <- list("RF" = RF_Result, "DT" = DT_Result, "KNN" = KNN_Result, "LM" = Lm_Result, 
-                         "Lasso" = Lasso_Result, "IntLm"=IntLm_Result, "IntLassao" =IntLasso_Result,
+                         "Lasso" = Lasso_Result, "IntLm"=IntLm_Result, "IntLasso" =IntLasso_Result,
                          "y" =Data$Valid$y, "ct" = Data$Valid$ct, "model" = MODEl, "Int_model" = IntModel)
     
   }else{
@@ -966,14 +977,14 @@ UpliftMethod <- function(train, valid, y, treatment){
 
 
 #### Modules
-SepOmaModule <- function(Train_Ypre1, Train_Ypre0, Valid_Ypre1, Valid_Ypre0, TargetVar, TreatVar){
+SepOmaModule <- function(Train_Ypre1, Train_Ypre0, Valid_Ypre1, Valid_Ypre0, TargetVar, TreatVar, Interaction){
   # transform data
-  Data_Ypre1 <- DataTransform(trainData =Train_Ypre1, validData = Valid_Ypre1, OneModel = TRUE, y = TargetVar, treatment = TreatVar,interaction = FALSE)
-  Data_Ypre0 <- DataTransform(trainData =Train_Ypre0, validData = Valid_Ypre0, OneModel = TRUE, y = TargetVar, treatment = TreatVar,interaction = FALSE)
+  Data_Ypre1 <- DataTransform(trainData =Train_Ypre1, validData = Valid_Ypre1, OneModel = TRUE, y = TargetVar, treatment = TreatVar,interaction = Interaction)
+  Data_Ypre0 <- DataTransform(trainData =Train_Ypre0, validData = Valid_Ypre0, OneModel = TRUE, y = TargetVar, treatment = TreatVar,interaction = Interaction)
   
   # predict separately
-  ModelYpre1 <- OmaMethod(Data_Ypre1, y = TargetVar, treatment = TreatVar, interaction = FALSE)
-  ModelYpre0 <- OmaMethod(Data_Ypre0, y = TargetVar, treatment = TreatVar, interaction = FALSE)
+  ModelYpre1 <- OmaMethod(Data_Ypre1, y = TargetVar, treatment = TreatVar, interaction = Interaction)
+  ModelYpre0 <- OmaMethod(Data_Ypre0, y = TargetVar, treatment = TreatVar, interaction = Interaction)
   
   
   # gathering the result
@@ -999,28 +1010,58 @@ SepOmaModule <- function(Train_Ypre1, Train_Ypre0, Valid_Ypre1, Valid_Ypre0, Tar
                              TargetVarYpre1 = ModelYpre1$y, TargetVarYpre0 = ModelYpre0$y,
                              TreatVarYpre1 = ModelYpre1$ct, TreatVarYpre0 = ModelYpre0$ct)
   
+  # collection models without interaction
   MODEl <- list("Ypre1" =NULL,"Ypre0" =NULL)
   MODEl$Ypre1 <- ModelYpre1$model
   MODEl$Ypre0 <- ModelYpre0$model
   
   
-  Result <- list("RF" = RF.result[, "gain_ratio"],
-                 "DT" = DT.result[, "gain_ratio"],
-                 "KNN" = KNN.result[,"gain_ratio"],
-                 "LM" = LM.result[, "gain_ratio"],
-                 "Lasso" = Lasso.result[,"gain_ratio"],
-                 "model" = MODEl)
+  if (Interaction == TRUE) {
+    IntLm.result <- SepPerform(ResYpre1 = ModelYpre1$IntLm, ResYpre0 = ModelYpre0$IntLm,
+                               TargetVarYpre1 = ModelYpre1$y, TargetVarYpre0 = ModelYpre0$y,
+                               TreatVarYpre1 = ModelYpre1$ct, TreatVarYpre0 = ModelYpre0$ct)
+    
+    
+    IntLasso.result <- SepPerform(ResYpre1 = ModelYpre1$IntLasso, ResYpre0 = ModelYpre0$IntLasso,
+                                  TargetVarYpre1 = ModelYpre1$y, TargetVarYpre0 = ModelYpre0$y,
+                                  TreatVarYpre1 = ModelYpre1$ct, TreatVarYpre0 = ModelYpre0$ct)
+    
+    
+    
+    # collect models with interaction
+    Int_model <- MODEl
+    Int_model$Ypre1 <- ModelYpre1$Int_model
+    Int_model$Ypre0 <- ModelYpre0$Int_model
+    
+    Result <- list("RF" = RF.result[, "gain_ratio"],
+                   "DT" = DT.result[, "gain_ratio"],
+                   "KNN" = KNN.result[,"gain_ratio"],
+                   "LM" = LM.result[, "gain_ratio"],
+                   "Lasso" = Lasso.result[,"gain_ratio"],
+                   "IntLm" = IntLm.result[,"gain_ratio"],
+                   "IntLasso" = IntLasso.result[,"gain_ratio"],
+                   "model" = MODEl, "Int_model" = Int_model)
+    
+  }else{
+    
+    Result <- list("RF" = RF.result[, "gain_ratio"],
+                   "DT" = DT.result[, "gain_ratio"],
+                   "KNN" = KNN.result[,"gain_ratio"],
+                   "LM" = LM.result[, "gain_ratio"],
+                   "Lasso" = Lasso.result[,"gain_ratio"],
+                   "model" = MODEl)
+  }
   
   return(Result)
 }
-SepTmaModule <- function(Train_Ypre1, Train_Ypre0, Valid_Ypre1, Valid_Ypre0, TargetVar, TreatVar){
+SepTmaModule <- function(Train_Ypre1, Train_Ypre0, Valid_Ypre1, Valid_Ypre0, TargetVar, TreatVar, Interaction){
   # transform data
-  Data_Ypre1 <- DataTransform(trainData =Train_Ypre1, validData = Valid_Ypre1, OneModel = FALSE, y = TargetVar, treatment = TreatVar, interaction = FALSE)
-  Data_Ypre0 <- DataTransform(trainData =Train_Ypre0, validData = Valid_Ypre0, OneModel = FALSE, y = TargetVar, treatment = TreatVar, interaction = FALSE)
+  Data_Ypre1 <- DataTransform(trainData =Train_Ypre1, validData = Valid_Ypre1, OneModel = FALSE, y = TargetVar, treatment = TreatVar, interaction = Interaction)
+  Data_Ypre0 <- DataTransform(trainData =Train_Ypre0, validData = Valid_Ypre0, OneModel = FALSE, y = TargetVar, treatment = TreatVar, interaction = Interaction)
   
   # predict separately
-  ModelYpre1 <- TmaMethod(Data_Ypre1, y = TargetVar, treatment = TreatVar, interaction = FALSE)
-  ModelYpre0 <- TmaMethod(Data_Ypre0, y = TargetVar, treatment = TreatVar, interaction = FALSE)
+  ModelYpre1 <- TmaMethod(Data_Ypre1, y = TargetVar, treatment = TreatVar, interaction = Interaction)
+  ModelYpre0 <- TmaMethod(Data_Ypre0, y = TargetVar, treatment = TreatVar, interaction = Interaction)
   
   
   # gathering the result
@@ -1051,13 +1092,47 @@ SepTmaModule <- function(Train_Ypre1, Train_Ypre0, Valid_Ypre1, Valid_Ypre0, Tar
   MODEl$Ypre0 <- ModelYpre0$model
   
   
-  Result <- list("RF" = RF.result[, "gain_ratio"],
-                 "DT" = DT.result[, "gain_ratio"],
-                 "KNN" = KNN.result[, "gain_ratio"],
-                 "LM" = LM.result[,"gain_ratio"],
-                 "Lasso" = Lasso.result[,"gain_ratio"],
-                 "model" = MODEl)
+  # collection models without interaction
+  MODEl <- list("Ypre1" =NULL,"Ypre0" =NULL)
+  MODEl$Ypre1 <- ModelYpre1$model
+  MODEl$Ypre0 <- ModelYpre0$model
   
+  
+  if (Interaction == TRUE) {
+    IntLm.result <- SepPerform(ResYpre1 = ModelYpre1$IntLm, ResYpre0 = ModelYpre0$IntLm,
+                               TargetVarYpre1 = ModelYpre1$y, TargetVarYpre0 = ModelYpre0$y,
+                               TreatVarYpre1 = ModelYpre1$ct, TreatVarYpre0 = ModelYpre0$ct)
+    
+    
+    IntLasso.result <- SepPerform(ResYpre1 = ModelYpre1$IntLasso, ResYpre0 = ModelYpre0$IntLasso,
+                                  TargetVarYpre1 = ModelYpre1$y, TargetVarYpre0 = ModelYpre0$y,
+                                  TreatVarYpre1 = ModelYpre1$ct, TreatVarYpre0 = ModelYpre0$ct)
+    
+    
+    
+    # collect models with interaction
+    Int_model <- MODEl
+    Int_model$Ypre1 <- ModelYpre1$Int_model
+    Int_model$Ypre0 <- ModelYpre0$Int_model
+    
+    Result <- list("RF" = RF.result[, "gain_ratio"],
+                   "DT" = DT.result[, "gain_ratio"],
+                   "KNN" = KNN.result[,"gain_ratio"],
+                   "LM" = LM.result[, "gain_ratio"],
+                   "Lasso" = Lasso.result[,"gain_ratio"],
+                   "IntLm" = IntLm.result[,"gain_ratio"],
+                   "IntLasso" = IntLasso.result[,"gain_ratio"],
+                   "model" = MODEl, "Int_model" = Int_model)
+    
+  }else{
+    
+    Result <- list("RF" = RF.result[, "gain_ratio"],
+                   "DT" = DT.result[, "gain_ratio"],
+                   "KNN" = KNN.result[,"gain_ratio"],
+                   "LM" = LM.result[, "gain_ratio"],
+                   "Lasso" = Lasso.result[,"gain_ratio"],
+                   "model" = MODEl)
+  }
   return(Result)
 }
 SepUpliftModule <- function(Train_Ypre1, Train_Ypre0, Valid_Ypre1, Valid_Ypre0, TargetVar, TreatVar){
@@ -1133,7 +1208,7 @@ OmaModule <- function(TrainData, ValidData, TargetVar, TreatVar, Interaction){
                                 y = Model$y %>% as.character()%>% as.numeric(), 
                                 ct = Model$ct %>% as.character()%>% as.numeric(), direction = 1) %>% upliftDecile()
     
-    IntLasso.result <- performance(pr.y1_ct1 = Model$IntLassao$T1, pr.y1_ct0 = Model$IntLassao$T0, 
+    IntLasso.result <- performance(pr.y1_ct1 = Model$IntLasso$T1, pr.y1_ct0 = Model$IntLasso$T0, 
                                    y = Model$y %>% as.character()%>% as.numeric(), 
                                    ct = Model$ct %>% as.character()%>% as.numeric(), direction = 1) %>% upliftDecile()
     
